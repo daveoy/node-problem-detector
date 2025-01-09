@@ -83,6 +83,22 @@ func NewLogMonitorOrDie(configPath string) types.Monitor {
 	// A 1000 size channel should be big enough.
 	l.output = make(chan *types.Status, 1000)
 
+	l.config.Rules = append(l.config.Rules, systemlogtypes.Rule{
+		Pattern: "[npd-internal] Entering watch loop",
+		Type:    types.Temp,
+		Reason:  "WatchLoopStarted",
+	})
+
+	// add rule for revives if enabled
+	if val, ok := l.config.WatcherConfig.PluginConfig["revive"]; ok && val == "true" {
+		klog.Infof("Revive is enabled")
+		l.config.Rules = append(l.config.Rules, systemlogtypes.Rule{
+			Pattern: "[npd-internal] Reviving.*parser",
+			Type:    types.Temp,
+			Reason:  "ParserRevived",
+		})
+	}
+
 	if *l.config.EnableMetricsReporting {
 		initializeProblemMetricsOrDie(l.config.Rules)
 	}
