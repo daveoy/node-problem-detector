@@ -84,6 +84,10 @@ func (k *kernelLogWatcher) Stop() {
 
 // watchLoop is the main watch loop of kernel log watcher.
 func (k *kernelLogWatcher) watchLoop() {
+	k.logCh <- &logtypes.Log{
+		Message:   "[npd-internal] Entering watch loop",
+		Timestamp: time.Now(),
+	}
 	kmsgs := k.kmsgParser.Parse()
 	defer func() {
 		if err := k.kmsgParser.Close(); err != nil {
@@ -145,6 +149,10 @@ func (k *kernelLogWatcher) reviveMyself() {
 	// }
 	// klog.Infof("Reviving kmsg parser, attempt %d of %d", k.reviveCount, reviveRetries)
 	klog.Infof("Reviving kmsg parser, attempt %d", k.reviveCount)
+	k.logCh <- &logtypes.Log{
+		Message:   "[npd-internal] Reviving kmsg parser",
+		Timestamp: time.Now(),
+	}
 	if err := k.kmsgParser.Close(); err != nil {
 		klog.Errorf("Failed to close kmsg parser: %v", err)
 	}
