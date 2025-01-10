@@ -135,6 +135,7 @@ func (k *kernelLogWatcher) SetKmsgParser() error {
 	if err != nil {
 		return fmt.Errorf("failed to create kmsg parser: %v", err)
 	}
+	parser.SetLogger(&kmsgParserLogger{})
 	k.kmsgParser = parser
 	return nil
 }
