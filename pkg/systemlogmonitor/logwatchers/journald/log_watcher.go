@@ -93,7 +93,7 @@ const waitLogTimeout = 5 * time.Second
 // watchLoop is the main watch loop of journald watcher.
 func (j *journaldWatcher) watchLoop() {
 	j.logCh <- &logtypes.Log{
-		Message:   "[npd-internal] Entering watch loop",
+		Message:   "[npd-internal] Entering journald watch loop (source: " + j.cfg.PluginConfig[configSourceKey] + ")",
 		Timestamp: time.Now(),
 	}
 	startTimestamp := timeToJournalTimestamp(j.startTime)
@@ -114,7 +114,7 @@ func (j *journaldWatcher) watchLoop() {
 		n, err := j.journal.Next()
 		if err != nil {
 			j.logCh <- &logtypes.Log{
-				Message:   "[npd-internal] Failed to get next journal entry",
+				Message:   "[npd-internal] Failed to get next journald entry (source: " + j.cfg.PluginConfig[configSourceKey] + ")",
 				Timestamp: time.Now(),
 			}
 			klog.Errorf("Failed to get next journal entry: %v", err)
@@ -129,7 +129,7 @@ func (j *journaldWatcher) watchLoop() {
 		entry, err := j.journal.GetEntry()
 		if err != nil {
 			j.logCh <- &logtypes.Log{
-				Message:   "[npd-internal] Failed to get journal entry",
+				Message:   "[npd-internal] Failed to get journald entry (source: " + j.cfg.PluginConfig[configSourceKey] + ")",
 				Timestamp: time.Now(),
 			}
 			klog.Errorf("failed to get journal entry: %v", err)
