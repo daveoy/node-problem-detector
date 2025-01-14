@@ -23,6 +23,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -41,6 +42,8 @@ import (
 
 // Client is the interface of problem client
 type Client interface {
+	// DeleteDeprecatedConditions deletes the deprecated conditions of the node.
+	DeleteDeprecatedConditions(ctx context.Context, conditionTypeStrings []string) error
 	// GetConditions get all specific conditions of current node.
 	GetConditions(ctx context.Context, conditionTypes []v1.NodeConditionType) ([]*v1.NodeCondition, error)
 	// SetConditions set or update conditions of current node.
@@ -120,6 +123,26 @@ func (c *nodeProblemClient) SetConditions(ctx context.Context, newConditions []v
 	)
 }
 
+func (c *nodeProblemClient) DeleteDeprecatedConditions(ctx context.Context, conditionTypeStrings []string) error {
+	// get node object
+	node, err := c.GetNode(ctx)
+	if err != nil {
+		return err
+	}
+
+	conditionTypes := generateConditionTypes(conditionTypeStrings)
+	// create a slice of the conditions we want to keep
+	newConditions := []v1.NodeCondition{}
+	for _, condition := range node.Status.Conditions {
+		if !slices.Contains(conditionTypes, condition.Type) {
+			newConditions = append(newConditions, condition)
+		}
+	}
+
+	// update the node object
+	return c.SetConditions(ctx, newConditions)
+}
+
 func (c *nodeProblemClient) Eventf(eventType, source, reason, messageFmt string, args ...interface{}) {
 	recorder, found := c.recorders[source]
 	if !found {
@@ -162,4 +185,13 @@ func getNodeRef(namespace, nodeName string) *v1.ObjectReference {
 		UID:       types.UID(nodeName),
 		Namespace: namespace,
 	}
+}
+
+func generateConditionTypes(conditionTypeStrings []string) []v1.NodeConditionType {
+	// convert the condition type strings to NodeConditionType
+	conditionTypes := []v1.NodeConditionType{}
+	for _, conditionTypeString := range conditionTypeStrings {
+		conditionTypes = append(conditionTypes, v1.NodeConditionType(conditionTypeString))
+	}
+	return conditionTypes
 }
