@@ -136,11 +136,18 @@ func (c *nodeProblemClient) DeleteDeprecatedConditions(ctx context.Context, cond
 	for _, condition := range node.Status.Conditions {
 		if !slices.Contains(conditionTypes, condition.Type) {
 			newConditions = append(newConditions, condition)
+		} else {
+			klog.Infof("Deleting deprecated condition %s", condition.Type)
 		}
 	}
 
-	// update the node object
-	return c.SetConditions(ctx, newConditions)
+	// update the node status
+	node.Status.Conditions = newConditions
+	_, err = c.client.Nodes().UpdateStatus(ctx, node, metav1.UpdateOptions{})
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (c *nodeProblemClient) Eventf(eventType, source, reason, messageFmt string, args ...interface{}) {
