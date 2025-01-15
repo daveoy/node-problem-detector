@@ -145,15 +145,16 @@ func (c *nodeProblemClient) DeleteDeprecatedConditions(ctx context.Context, cond
 	// update the node status if we need to,
 	// we only need to if the number of conditions has changed
 	if len(newConditions) < len(node.Status.Conditions) {
-		// node.Status.Conditions = newConditions
-		// _, err = c.client.Nodes().UpdateStatus(ctx, node, metav1.UpdateOptions{})
-		// if err != nil {
-		// 	return err
-		// }
-		err = c.SetConditions(ctx, newConditions)
-		if err != nil {
-			return err
-		}
+		node.Status.Conditions = newConditions
+		return retry.OnError(retry.DefaultRetry,
+			func(error) bool {
+				return true
+			},
+			func() error {
+				_, err = c.client.Nodes().UpdateStatus(ctx, node, metav1.UpdateOptions{})
+				return err
+			},
+		)
 	} else {
 		klog.Infof("No deprecated conditions to delete")
 	}
