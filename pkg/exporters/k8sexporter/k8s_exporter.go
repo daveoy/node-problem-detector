@@ -66,7 +66,7 @@ func NewExporterOrDie(ctx context.Context, npdo *options.NodeProblemDetectorOpti
 	if npdo.DeleteDeprecatedConditions {
 		err := ke.client.DeleteDeprecatedConditions(ctx, npdo.DeprecatedConditionTypes)
 		if err != nil {
-			klog.Fatalf("Failed to delete deprecated conditions: %v", err)
+			klog.Errorf("Failed to delete deprecated conditions: %v", err)
 		}
 	}
 	ke.conditionManager.Start(ctx)
