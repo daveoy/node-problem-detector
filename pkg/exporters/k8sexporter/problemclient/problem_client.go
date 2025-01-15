@@ -132,12 +132,10 @@ func (c *nodeProblemClient) DeleteDeprecatedConditions(ctx context.Context, cond
 	}
 
 	conditionTypes := generateConditionTypes(conditionTypeStrings)
-	klog.Infof("Deleting deprecated conditions: %v", conditionTypes)
 	// create a slice of the conditions we want to keep
 	newConditions := []v1.NodeCondition{}
 	for _, condition := range node.Status.Conditions {
 		if !slices.Contains(conditionTypes, condition.Type) {
-			klog.Infof("Keeping condition %s", condition.Type)
 			newConditions = append(newConditions, condition)
 		} else {
 			klog.Infof("Deleting deprecated condition %s", condition.Type)
