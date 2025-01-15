@@ -125,16 +125,19 @@ func (c *nodeProblemClient) SetConditions(ctx context.Context, newConditions []v
 
 func (c *nodeProblemClient) DeleteDeprecatedConditions(ctx context.Context, conditionTypeStrings []string) error {
 	// get node object
+	klog.Infof("Deleting deprecated conditions %v (if present)...", conditionTypeStrings)
 	node, err := c.GetNode(ctx)
 	if err != nil {
 		return err
 	}
 
 	conditionTypes := generateConditionTypes(conditionTypeStrings)
+	klog.Infof("Deleting deprecated conditions: %v", conditionTypes)
 	// create a slice of the conditions we want to keep
 	newConditions := []v1.NodeCondition{}
 	for _, condition := range node.Status.Conditions {
 		if !slices.Contains(conditionTypes, condition.Type) {
+			klog.Infof("Keeping condition %s", condition.Type)
 			newConditions = append(newConditions, condition)
 		} else {
 			klog.Infof("Deleting deprecated condition %s", condition.Type)
