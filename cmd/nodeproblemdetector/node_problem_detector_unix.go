@@ -44,8 +44,6 @@ func main() {
 	npdo.AddFlags(pflag.CommandLine)
 
 	pflag.Parse()
-	klog.Infof("Starting node-problem-detector with command line %+v", pflag.CommandLine)
-	klog.Infof("Starting node-problem-detector with options %+v", npdo)
 	if err := npdMain(context.Background(), npdo); err != nil {
 		klog.Fatalf("Problem detector failed with error: %v", err)
 	}
