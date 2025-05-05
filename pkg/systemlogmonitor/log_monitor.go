@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"regexp"
 	"time"
 
 	"k8s.io/klog/v2"
@@ -175,7 +174,7 @@ func (l *logMonitor) generateStatus(logs []*systemlogtypes.Log, rule systemlogty
 		events = append(events, types.Event{
 			Severity:  types.Warn,
 			Timestamp: timestamp,
-			Reason:    applyRulePatternToReason(message, rule),
+			Reason:    rule.Reason,
 			Message:   message,
 		})
 	} else {
@@ -198,7 +197,7 @@ func (l *logMonitor) generateStatus(logs []*systemlogtypes.Log, rule systemlogty
 					))
 				}
 				condition.Status = types.True
-				condition.Reason = applyRulePatternToReason(message, rule)
+				condition.Reason = rule.Reason
 				changedConditions = append(changedConditions, condition)
 				break
 			}
@@ -207,7 +206,6 @@ func (l *logMonitor) generateStatus(logs []*systemlogtypes.Log, rule systemlogty
 
 	if *l.config.EnableMetricsReporting {
 		for _, event := range events {
-			// if our reason contains regex subs, modify the reason label to pull field values from the log
 			err := problemmetrics.GlobalProblemMetricsManager.IncrementProblemCounter(event.Reason, 1)
 			if err != nil {
 				klog.Errorf("Failed to update problem counter metrics for %q: %v", event.Reason, err)
@@ -263,16 +261,4 @@ func generateMessage(logs []*systemlogtypes.Log, patternGeneratedMessageSuffix s
 		return fmt.Sprintf("%s; %s", logMessage, patternGeneratedMessageSuffix)
 	}
 	return logMessage
-}
-
-func applyRulePatternToReason(m string, rule systemlogtypes.Rule) string {
-	r := rule.Reason
-	re, err := regexp.Compile(rule.Pattern)
-	if err != nil {
-		return r
-	}
-	if re.MatchString(m) {
-		r = re.ReplaceAllString(m, r)
-	}
-	return r
 }
