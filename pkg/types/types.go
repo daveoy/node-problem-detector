@@ -17,6 +17,7 @@ limitations under the License.
 package types
 
 import (
+	"context"
 	"time"
 
 	"github.com/spf13/pflag"
@@ -109,6 +110,11 @@ type Monitor interface {
 	Start() (<-chan *Status, error)
 	// Stop stops the monitor.
 	Stop()
+}
+
+type RefreshableMonitor interface {
+	Monitor
+	RefreshLoop(context.Context, time.Duration) error
 }
 
 // Exporter exports machine health data to certain control plane.
