@@ -170,14 +170,19 @@ func (l *logMonitor) Start() (<-chan *types.Status, error) {
 		return nil, err
 	}
 	go l.monitorLoop()
-	if l.config.PluginConfig["refresh"] != "" {
+	if val, ok := l.config.PluginConfig["refresh"]; ok && val != "" {
 		klog.Infof("Log monitor %s is configured to refresh periodically", l.configPath)
-		durationSeconds, err := strconv.Atoi(l.config.PluginConfig["refreshIntervalSeconds"])
-		if err != nil {
-			klog.Errorf("Using default for log monitor %s: %v", l.configPath, err)
-			durationSeconds = 30
+		d, ok := l.config.PluginConfig["refreshDurationSeconds"]
+		if !ok {
+			klog.Warningf("Log monitor %s is configured to refresh periodically, but no refreshDurationSeconds is set, using default 30 seconds", l.configPath)
+			d = "30"
 		}
-		go l.RefreshLoop(problemdaemon.Ctx, time.Duration(durationSeconds)*time.Second)
+		ds, err := strconv.Atoi(d)
+		if err != nil {
+			klog.Errorf("failed to convert to int, using default for log monitor %s: %v", l.configPath, err)
+			ds = 30
+		}
+		go l.RefreshLoop(problemdaemon.Ctx, time.Duration(ds)*time.Second)
 	}
 	return l.output, nil
 }
