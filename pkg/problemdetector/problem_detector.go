@@ -48,27 +48,27 @@ func NewProblemDetector(monitors []types.Monitor, exporters []types.Exporter) Pr
 func (p *problemDetector) Run(ctx context.Context) error {
 	// Start the log monitors one by one.
 	var chans []<-chan *types.Status
-	failureCount := 0
+	runningMonitors := []types.Monitor{}
+
 	for _, m := range p.monitors {
 		ch, err := m.Start()
 		if err != nil {
 			// Do not return error and keep on trying the following config files.
-			klog.Errorf("Failed to start problem daemon %v: %v", m, err)
-			failureCount++
+			klog.Errorf("Failed to start monitor %v: %v", m, err)
 			continue
 		}
 		if ch != nil {
 			chans = append(chans, ch)
 		}
+		runningMonitors = append(runningMonitors, m)
 	}
-	allMonitors := p.monitors
 
-	if len(allMonitors) == failureCount {
-		return fmt.Errorf("no problem daemon is successfully setup")
+	if len(runningMonitors) == 0 {
+		return fmt.Errorf("no monitor is successfully setup")
 	}
 
 	defer func() {
-		for _, m := range allMonitors {
+		for _, m := range runningMonitors {
 			m.Stop()
 		}
 	}()
