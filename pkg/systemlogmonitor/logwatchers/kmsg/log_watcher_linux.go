@@ -88,42 +88,53 @@ func (k *kernelLogWatcher) watchLoop() {
 		Message:   "[npd-internal] Entering watch loop for kernel log",
 		Timestamp: time.Now(),
 	}
-	kmsgs := k.kmsgParser.Parse()
-	defer func() {
-		if err := k.kmsgParser.Close(); err != nil {
-			klog.Errorf("Failed to close kmsg parser: %v", err)
-		}
-		close(k.logCh)
-		k.tomb.Done()
-	}()
+
+	defer close(k.logCh)
+	defer k.tomb.Done()
 
 	for {
-		select {
-		case <-k.tomb.Stopping():
-			klog.Infof("Stop watching kernel log")
-			return
-		case msg, ok := <-kmsgs:
-			if !ok {
-				if val, ok := k.cfg.PluginConfig["revive"]; ok && val == "true" {
-					k.reviveMyself()
-				}
-				klog.Error("Kmsg channel closed")
+		if err := k.SetKmsgParser(); err != nil {
+			klog.Errorf("Failed to create kmsg parser: %v", err)
+			time.Sleep(reviveDuration)
+			continue
+		}
+
+		kmsgs := k.kmsgParser.Parse()
+
+		for {
+			select {
+			case <-k.tomb.Stopping():
+				k.kmsgParser.Close()
+				klog.Infof("Stop watching kernel log")
 				return
-			}
-			klog.V(5).Infof("got kernel message: %+v", msg)
-			if msg.Message == "" {
-				continue
-			}
+			case msg, ok := <-kmsgs:
+				if !ok {
+					k.kmsgParser.Close()
 
-			// Discard messages before start time.
-			if msg.Timestamp.Before(k.startTime) {
-				klog.V(5).Infof("Throwing away msg %q before start time: %v < %v", msg.Message, msg.Timestamp, k.startTime)
-				continue
-			}
+					revive := k.cfg.PluginConfig["revive"] == "true"
+					if !revive {
+						klog.Info("Kmsg channel closed and revive is disabled")
+						return
+					}
 
-			k.logCh <- &logtypes.Log{
-				Message:   strings.TrimSpace(msg.Message),
-				Timestamp: msg.Timestamp,
+					klog.Error("Kmsg channel closed, reviving parser")
+					k.logCh <- &logtypes.Log{
+						Message:   "[npd-internal] Reviving kmsg parser",
+						Timestamp: time.Now(),
+					}
+
+					time.Sleep(reviveDuration)
+					break // break inner loop to re-init parser
+				}
+
+				if msg.Message == "" || msg.Timestamp.Before(k.startTime) {
+					continue
+				}
+				klog.V(5).Infof("got kernel message: %+v", msg)
+				k.logCh <- &logtypes.Log{
+					Message:   strings.TrimSpace(msg.Message),
+					Timestamp: msg.Timestamp,
+				}
 			}
 		}
 	}
@@ -138,30 +149,4 @@ func (k *kernelLogWatcher) SetKmsgParser() error {
 	parser.SetLogger(&kmsgParserLogger{})
 	k.kmsgParser = parser
 	return nil
-}
-
-// revive ourselves if the kmsg channel is closed
-// close the old kmsg parser and create a new one
-// enter the watch loop again
-func (k *kernelLogWatcher) reviveMyself() {
-	// if k.reviveCount >= reviveRetries {
-	// 	klog.Errorf("Failed to revive kmsg parser after %d retries", reviveRetries)
-	// 	return
-	// }
-	// klog.Infof("Reviving kmsg parser, attempt %d of %d", k.reviveCount, reviveRetries)
-	klog.Infof("Reviving kmsg parser, attempt %d", k.reviveCount)
-	k.logCh <- &logtypes.Log{
-		Message:   "[npd-internal] Reviving kmsg parser",
-		Timestamp: time.Now(),
-	}
-	if err := k.kmsgParser.Close(); err != nil {
-		klog.Errorf("Failed to close kmsg parser: %v", err)
-	}
-	time.Sleep(reviveDuration)
-	if err := k.SetKmsgParser(); err != nil {
-		klog.Errorf("Failed to revive kmsg parser: %v", err)
-		return
-	}
-	k.reviveCount++
-	k.watchLoop()
 }
