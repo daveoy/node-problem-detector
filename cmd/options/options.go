@@ -92,6 +92,7 @@ type NodeProblemDetectorOptions struct {
 	DeleteDeprecatedConditions bool
 	DeprecatedConditionTypes   []string
 
+	ReloadOnConfigChange bool
 	// NodeName is the node name used to communicate with Kubernetes ApiServer.
 	NodeName string
 }
@@ -136,7 +137,7 @@ func (npdo *NodeProblemDetectorOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.IntVar(&npdo.Burst, "kube-api-burst", 500, "Maximum burst for throttle while talking with Kubernetes API")
 	fs.BoolVar(&npdo.DeleteDeprecatedConditions, "delete-deprecated-conditions", false, "Whether to delete deprecated Conditions and Events from the node status")
 	fs.StringSliceVar(&npdo.DeprecatedConditionTypes, "deprecated-condition-types", []string{}, "List of deprecated condition types to delete. This is ignored if --delete-deprecated-conditions is false.")
-
+	fs.BoolVar(&npdo.ReloadOnConfigChange, "reload-on-config-change", false, "Whether to reload the node problem detector on config change. If false, the node problem detector will exit on config change.")
 	for _, exporterName := range exporters.GetExporterNames() {
 		exporterHandler := exporters.GetExporterHandlerOrDie(exporterName)
 		exporterHandler.Options.SetFlags(fs)

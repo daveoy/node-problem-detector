@@ -17,6 +17,7 @@ limitations under the License.
 package problemdaemon
 
 import (
+	"context"
 	"fmt"
 
 	"k8s.io/klog/v2"
@@ -25,7 +26,8 @@ import (
 )
 
 var (
-	handlers = make(map[types.ProblemDaemonType]types.ProblemDaemonHandler)
+	handlers    = make(map[types.ProblemDaemonType]types.ProblemDaemonHandler)
+	Ctx, Cancel = context.WithCancel(context.Background())
 )
 
 // Register registers a problem daemon factory method, which will be used to create the problem daemon.

@@ -44,7 +44,13 @@ func main() {
 	npdo.AddFlags(pflag.CommandLine)
 
 	pflag.Parse()
-	if err := npdMain(context.Background(), npdo); err != nil {
-		klog.Fatalf("Problem detector failed with error: %v", err)
+	for {
+		if err := npdMain(context.Background(), npdo); err != nil {
+			klog.Fatalf("Problem detector failed with error: %v", err)
+		}
+		if !npdo.ReloadOnConfigChange {
+			break
+		}
+		klog.Infof("Reloading node problem detector due to config change")
 	}
 }

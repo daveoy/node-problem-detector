@@ -121,7 +121,7 @@ func (c *conditionManager) syncLoop(ctx context.Context) {
 				c.sync(ctx)
 			}
 		case <-ctx.Done():
-			break
+			return
 		}
 	}
 }

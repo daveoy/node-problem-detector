@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"strconv"
+	"time"
 
 	"k8s.io/klog/v2"
 
@@ -62,7 +63,7 @@ func NewExporterOrDie(ctx context.Context, npdo *options.NodeProblemDetectorOpti
 		conditionManager: condition.NewConditionManager(c, clock.RealClock{}, npdo.K8sExporterHeartbeatPeriod),
 	}
 
-	ke.startHTTPReporting(npdo)
+	ke.startHTTPReporting(ctx, npdo)
 	if npdo.DeleteDeprecatedConditions {
 		err := ke.client.DeleteDeprecatedConditions(ctx, npdo.DeprecatedConditionTypes)
 		if err != nil {
@@ -83,7 +84,7 @@ func (ke *k8sExporter) ExportProblems(status *types.Status) {
 	}
 }
 
-func (ke *k8sExporter) startHTTPReporting(npdo *options.NodeProblemDetectorOptions) {
+func (ke *k8sExporter) startHTTPReporting(ctx context.Context, npdo *options.NodeProblemDetectorOptions) {
 	if npdo.ServerPort <= 0 {
 		return
 	}
@@ -109,10 +110,24 @@ func (ke *k8sExporter) startHTTPReporting(npdo *options.NodeProblemDetectorOptio
 	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 
 	addr := net.JoinHostPort(npdo.ServerAddress, strconv.Itoa(npdo.ServerPort))
+	server := &http.Server{
+		Addr:    addr,
+		Handler: mux,
+	}
 	go func() {
-		err := http.ListenAndServe(addr, mux)
-		if err != nil {
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			klog.Fatalf("Failed to start server: %v", err)
+		}
+	}()
+
+	// Shut it down when ctx is cancelled
+	go func() {
+		<-ctx.Done()
+		klog.Infof("Context cancelled; shutting down HTTP server on %s", addr)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			klog.Errorf("HTTP server shutdown error: %v", err)
 		}
 	}()
 }

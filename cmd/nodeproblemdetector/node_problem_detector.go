@@ -43,19 +43,22 @@ func npdMain(ctx context.Context, npdo *options.NodeProblemDetectorOptions) erro
 	npdo.SetConfigFromDeprecatedOptionsOrDie()
 	npdo.ValidOrDie()
 
-	// Initialize problem daemons.
+	// Initialize problem daemon.
+	ctx, cancel := context.WithCancel(ctx)
+	problemdaemon.Ctx = ctx
+	problemdaemon.Cancel = cancel
 	problemDaemons := problemdaemon.NewProblemDaemons(npdo.MonitorConfigPaths)
 	if len(problemDaemons) == 0 {
-		klog.Fatalf("No problem daemon is configured")
+		klog.Fatalf("No monitor is configured")
 	}
 
 	// Initialize exporters.
 	defaultExporters := []types.Exporter{}
-	if ke := k8sexporter.NewExporterOrDie(ctx, npdo); ke != nil {
+	if ke := k8sexporter.NewExporterOrDie(problemdaemon.Ctx, npdo); ke != nil {
 		defaultExporters = append(defaultExporters, ke)
 		klog.Info("K8s exporter started.")
 	}
-	if pe := prometheusexporter.NewExporterOrDie(npdo); pe != nil {
+	if pe := prometheusexporter.NewExporterOrDie(problemdaemon.Ctx, npdo); pe != nil {
 		defaultExporters = append(defaultExporters, pe)
 		klog.Info("Prometheus exporter started.")
 	}
@@ -72,5 +75,5 @@ func npdMain(ctx context.Context, npdo *options.NodeProblemDetectorOptions) erro
 
 	// Initialize NPD core.
 	p := problemdetector.NewProblemDetector(problemDaemons, npdExporters)
-	return p.Run(ctx)
+	return p.Run(problemdaemon.Ctx)
 }
