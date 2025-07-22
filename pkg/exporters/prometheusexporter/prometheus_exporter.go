@@ -17,9 +17,11 @@ limitations under the License.
 package prometheusexporter
 
 import (
+	"context"
 	"net"
 	"net/http"
 	"strconv"
+	"time"
 
 	"contrib.go.opencensus.io/exporter/prometheus"
 	"go.opencensus.io/stats/view"
@@ -32,7 +34,7 @@ import (
 type prometheusExporter struct{}
 
 // NewExporterOrDie creates an exporter to export metrics to Prometheus, panics if error occurs.
-func NewExporterOrDie(npdo *options.NodeProblemDetectorOptions) types.Exporter {
+func NewExporterOrDie(ctx context.Context, npdo *options.NodeProblemDetectorOptions) types.Exporter {
 	if npdo.PrometheusServerPort <= 0 {
 		return nil
 	}
@@ -42,13 +44,32 @@ func NewExporterOrDie(npdo *options.NodeProblemDetectorOptions) types.Exporter {
 	if err != nil {
 		klog.Fatalf("Failed to create Prometheus exporter: %v", err)
 	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", pe)
+
+	server := &http.Server{
+		Addr:    addr,
+		Handler: mux,
+	}
+
 	go func() {
-		mux := http.NewServeMux()
-		mux.Handle("/metrics", pe)
-		if err := http.ListenAndServe(addr, mux); err != nil {
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			klog.Fatalf("Failed to start Prometheus scrape endpoint: %v", err)
 		}
 	}()
+
+	// Shut it down when ctx is cancelled
+	go func() {
+		<-ctx.Done()
+		klog.Infof("Context cancelled; shutting down HTTP server on %s", addr)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			klog.Errorf("HTTP server shutdown error: %v", err)
+		}
+	}()
+
 	view.RegisterExporter(pe)
 	return &prometheusExporter{}
 }
