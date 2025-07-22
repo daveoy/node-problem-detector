@@ -17,13 +17,16 @@ limitations under the License.
 package systemlogmonitor
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	"k8s.io/klog/v2"
 
+	"github.com/google/go-cmp/cmp"
 	"k8s.io/node-problem-detector/pkg/problemdaemon"
 	"k8s.io/node-problem-detector/pkg/problemmetrics"
 	"k8s.io/node-problem-detector/pkg/systemlogmonitor/logwatchers"
@@ -89,6 +92,58 @@ func NewLogMonitorOrDie(configPath string) types.Monitor {
 	return l
 }
 
+// RefreshLoop is a goroutine that periodically refreshes the log monitor configuration.
+func (l *logMonitor) RefreshLoop(ctx context.Context, interval time.Duration) error {
+	klog.Infof("Start log monitor config refresh loop for %s", l.configPath)
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			if e := l.refreshConfig(); e != nil {
+				klog.Errorf("Failed to refresh log monitor config %s: %v", l.configPath, e)
+				return e
+			}
+		case <-l.tomb.Stopping():
+			klog.Infof("Log monitor config refresh loop stopped: %s", l.configPath)
+			return nil
+		case <-ctx.Done():
+			klog.Infof("Log monitor config refresh loop context done: %s", l.configPath)
+			return nil
+		}
+	}
+}
+
+// refreshConfig will reread the  config file path, compare the new config with the old one,
+// and stop the log monitor if there is any change.
+func (l *logMonitor) refreshConfig() error {
+	o := l.config
+	f, err := os.ReadFile(l.configPath)
+	if err != nil {
+		klog.Errorf("Failed to read configuration file %q: %v", l.configPath, err)
+		return err
+	}
+	n := MonitorConfig{}
+	err = json.Unmarshal(f, &n)
+	if err != nil {
+		klog.Errorf("Failed to unmarshal configuration file %q: %v", l.configPath, err)
+		return err
+	}
+	n.ApplyDefaultConfiguration()
+	if err := n.ValidateRules(); err != nil {
+		klog.Errorf("Failed to validate %s matching rules %+v: %v", l.configPath, n.Rules, err)
+		return err
+	}
+	if !cmp.Equal(o, n) {
+		fmt.Println("Diff:", cmp.Diff(o, n))
+		klog.Infof("Log monitor config %s is changed, updating", l.configPath)
+		problemdaemon.Cancel()
+		return fmt.Errorf("log monitor config change requires restart")
+	}
+	// klog.Infof("[%s] Log monitor config %s is unchanged, skip updating", l.config.Plugin, l.configPath)
+	return nil
+}
+
 // initializeProblemMetricsOrDie creates problem metrics for all problems and set the value to 0,
 // panic if error occurs.
 func initializeProblemMetricsOrDie(rules []systemlogtypes.Rule) {
@@ -115,6 +170,15 @@ func (l *logMonitor) Start() (<-chan *types.Status, error) {
 		return nil, err
 	}
 	go l.monitorLoop()
+	if l.config.PluginConfig["refresh"] != "" {
+		klog.Infof("Log monitor %s is configured to refresh periodically", l.configPath)
+		durationSeconds, err := strconv.Atoi(l.config.PluginConfig["refreshIntervalSeconds"])
+		if err != nil {
+			klog.Errorf("Using default for log monitor %s: %v", l.configPath, err)
+			durationSeconds = 30
+		}
+		go l.RefreshLoop(problemdaemon.Ctx, time.Duration(durationSeconds)*time.Second)
+	}
 	return l.output, nil
 }
 
