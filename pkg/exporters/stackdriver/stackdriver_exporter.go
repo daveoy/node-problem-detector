@@ -26,7 +26,6 @@ import (
 	gcpmetric "github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric"
 	"github.com/avast/retry-go/v4"
 	"github.com/spf13/pflag"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"k8s.io/klog/v2"
@@ -35,6 +34,7 @@ import (
 	seconfig "k8s.io/node-problem-detector/pkg/exporters/stackdriver/config"
 	"k8s.io/node-problem-detector/pkg/types"
 	"k8s.io/node-problem-detector/pkg/util/metrics"
+	otelutil "k8s.io/node-problem-detector/pkg/util/otel"
 )
 
 func init() {
@@ -108,7 +108,7 @@ func getMetricTypeConversionFunction(customMetricPrefix string) func(string) str
 		if !ok {
 			return fallbackMetricType
 		}
-		
+
 		if stackdriverMetricType, ok := NPDMetricToSDMetric[metricID]; ok {
 			return stackdriverMetricType
 		}
@@ -117,8 +117,7 @@ func getMetricTypeConversionFunction(customMetricPrefix string) func(string) str
 }
 
 type stackdriverExporter struct {
-	config        seconfig.StackdriverExporterConfig
-	meterProvider *metric.MeterProvider
+	config seconfig.StackdriverExporterConfig
 }
 
 // ExportProblems does nothing.
@@ -148,13 +147,8 @@ func (se *stackdriverExporter) setupOTelExporterOrDie() {
 		metric.WithInterval(exportPeriod),
 	)
 
-	// Create meter provider with GCP exporter
-	se.meterProvider = metric.NewMeterProvider(
-		metric.WithReader(reader),
-	)
-
-	// Set as global meter provider
-	otel.SetMeterProvider(se.meterProvider)
+	// Register the GCP reader with the global meter provider
+	otelutil.AddMetricReader(reader)
 
 	klog.Infof("Google Cloud Monitoring exporter configured for project %s", se.config.GCEMetadata.ProjectID)
 }

@@ -22,18 +22,15 @@ import (
 	"strconv"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/prometheus"
-	"go.opentelemetry.io/otel/sdk/metric"
 	"k8s.io/klog/v2"
 
 	"k8s.io/node-problem-detector/cmd/options"
 	"k8s.io/node-problem-detector/pkg/types"
+	otelutil "k8s.io/node-problem-detector/pkg/util/otel"
 )
 
-type prometheusExporter struct {
-	meterProvider *metric.MeterProvider
-}
+type prometheusExporter struct {}
 
 // NewExporterOrDie creates an exporter to export metrics to Prometheus, panics if error occurs.
 func NewExporterOrDie(npdo *options.NodeProblemDetectorOptions) types.Exporter {
@@ -47,17 +44,11 @@ func NewExporterOrDie(npdo *options.NodeProblemDetectorOptions) types.Exporter {
 		klog.Fatalf("Failed to create Prometheus exporter: %v", err)
 	}
 
-	// Create meter provider with Prometheus exporter
-	meterProvider := metric.NewMeterProvider(
-		metric.WithReader(promExporter),
-	)
+	// Register the Prometheus reader with the global meter provider
+	// The prometheus.Exporter implements sdkmetric.Reader interface
+	otelutil.AddMetricReader(promExporter)
 
-	// Set as global meter provider
-	otel.SetMeterProvider(meterProvider)
-
-	pe := &prometheusExporter{
-		meterProvider: meterProvider,
-	}
+	pe := &prometheusExporter{}
 
 	// Start HTTP server for Prometheus scraping
 	addr := net.JoinHostPort(npdo.PrometheusServerAddress, strconv.Itoa(npdo.PrometheusServerPort))
