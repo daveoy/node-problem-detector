@@ -30,6 +30,7 @@ import (
 	"k8s.io/node-problem-detector/pkg/problemdaemon"
 	"k8s.io/node-problem-detector/pkg/problemdetector"
 	"k8s.io/node-problem-detector/pkg/types"
+	otelutil "k8s.io/node-problem-detector/pkg/util/otel"
 	"k8s.io/node-problem-detector/pkg/version"
 )
 
@@ -69,6 +70,10 @@ func npdMain(ctx context.Context, npdo *options.NodeProblemDetectorOptions) erro
 	if len(npdExporters) == 0 {
 		klog.Fatalf("No exporter is successfully setup")
 	}
+
+	// Initialize OpenTelemetry meter provider with all registered readers
+	// This must be called after all exporters have been created and registered their readers
+	otelutil.InitializeMeterProvider()
 
 	// Initialize NPD core.
 	p := problemdetector.NewProblemDetector(problemDaemons, npdExporters)
