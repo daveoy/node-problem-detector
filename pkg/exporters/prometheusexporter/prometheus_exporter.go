@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Kubernetes Authors All rights reserved.
+Copyright 2025 The Kubernetes Authors All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,15 +21,19 @@ import (
 	"net/http"
 	"strconv"
 
-	"contrib.go.opencensus.io/exporter/prometheus"
-	"go.opencensus.io/stats/view"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/prometheus"
+	"go.opentelemetry.io/otel/sdk/metric"
 	"k8s.io/klog/v2"
 
 	"k8s.io/node-problem-detector/cmd/options"
 	"k8s.io/node-problem-detector/pkg/types"
 )
 
-type prometheusExporter struct{}
+type prometheusExporter struct {
+	meterProvider *metric.MeterProvider
+}
 
 // NewExporterOrDie creates an exporter to export metrics to Prometheus, panics if error occurs.
 func NewExporterOrDie(npdo *options.NodeProblemDetectorOptions) types.Exporter {
@@ -37,20 +41,36 @@ func NewExporterOrDie(npdo *options.NodeProblemDetectorOptions) types.Exporter {
 		return nil
 	}
 
-	addr := net.JoinHostPort(npdo.PrometheusServerAddress, strconv.Itoa(npdo.PrometheusServerPort))
-	pe, err := prometheus.NewExporter(prometheus.Options{})
+	// Create Prometheus exporter
+	promExporter, err := prometheus.New()
 	if err != nil {
 		klog.Fatalf("Failed to create Prometheus exporter: %v", err)
 	}
+
+	// Create meter provider with Prometheus exporter
+	meterProvider := metric.NewMeterProvider(
+		metric.WithReader(promExporter),
+	)
+
+	// Set as global meter provider
+	otel.SetMeterProvider(meterProvider)
+
+	pe := &prometheusExporter{
+		meterProvider: meterProvider,
+	}
+
+	// Start HTTP server for Prometheus scraping
+	addr := net.JoinHostPort(npdo.PrometheusServerAddress, strconv.Itoa(npdo.PrometheusServerPort))
 	go func() {
 		mux := http.NewServeMux()
-		mux.Handle("/metrics", pe)
+		mux.Handle("/metrics", promhttp.Handler())
 		if err := http.ListenAndServe(addr, mux); err != nil {
 			klog.Fatalf("Failed to start Prometheus scrape endpoint: %v", err)
 		}
 	}()
-	view.RegisterExporter(pe)
-	return &prometheusExporter{}
+
+	klog.Infof("Prometheus exporter started on %s", addr)
+	return pe
 }
 
 // ExportProblems does nothing.

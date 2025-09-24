@@ -17,47 +17,48 @@ package metrics
 
 import (
 	"context"
-	"fmt"
 
-	"go.opencensus.io/stats"
-	"go.opencensus.io/stats/view"
-	"go.opencensus.io/tag"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
+	"k8s.io/klog/v2"
 )
 
-// Int64MetricRepresentation represents a snapshot of an int64 metrics.
-// This is used for inspecting metric internals.
+// Int64MetricRepresentation represents a parsed Prometheus metric with int64 value
 type Int64MetricRepresentation struct {
-	// Name is the metric name.
-	Name string
-	// Labels contains all metric labels in key-value pair format.
+	Name   string
 	Labels map[string]string
-	// Value is the value of the metric.
-	Value int64
+	Value  int64
 }
 
-// Int64Metric represents an int64 metric.
-type Int64Metric struct {
-	name    string
-	measure *stats.Int64Measure
+// Int64MetricInterface is the interface for int64 metrics
+type Int64MetricInterface interface {
+	Record(labelValues map[string]string, value int64) error
 }
 
-// NewInt64Metric create a Int64Metric metric, returns nil when viewName is empty.
-func NewInt64Metric(metricID MetricID, viewName string, description string, unit string, aggregation Aggregation, tagNames []string) (*Int64Metric, error) {
-	if viewName == "" {
-		return nil, nil
+// OTelInt64Metric wraps OpenTelemetry int64 instruments
+type OTelInt64Metric struct {
+	name        string
+	description string
+	unit        string
+	aggregation Aggregation
+	labels      []string
+	counter     metric.Int64Counter
+	gauge       metric.Int64UpDownCounter
+	meter       metric.Meter
+}
+
+// Record implements Int64MetricInterface
+func (m *OTelInt64Metric) Record(labelValues map[string]string, value int64) error {
+	ctx := context.Background()
+
+	// Convert to OTel attributes
+	attrs := make([]attribute.KeyValue, 0, len(labelValues))
+	for k, v := range labelValues {
+		attrs = append(attrs, attribute.String(k, v))
 	}
 
-	MetricMap.AddMapping(metricID, viewName)
-
-	tagKeys, err := getTagKeysFromNames(tagNames)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create metric %q because of tag creation failure: %v", viewName, err)
-	}
-
-	var aggregationMethod *view.Aggregation
-	switch aggregation {
-	case LastValue:
-		aggregationMethod = view.LastValue()
+	switch m.aggregation {
 	case Sum:
 		aggregationMethod = view.Sum()
 	default:
@@ -92,11 +93,57 @@ func (metric *Int64Metric) Record(tags map[string]string, measurement int64) err
 		if !ok {
 			return fmt.Errorf("referencing none existing tag %q in metric %q", tagName, metric.name)
 		}
-		mutators = append(mutators, tag.Upsert(tagKey, tagValue))
+	case LastValue:
+		if m.gauge != nil {
+			m.gauge.Add(ctx, value, metric.WithAttributes(attrs...))
+		}
+	default:
+		klog.Warningf("Unsupported aggregation type: %v", m.aggregation)
 	}
 
-	return stats.RecordWithTags(
-		context.Background(),
-		mutators,
-		metric.measure.M(measurement))
+	return nil
+}
+
+// Type aliases for backward compatibility
+type Int64Metric = OTelInt64Metric
+
+// NewInt64Metric creates a new Int64 metric using OpenTelemetry
+func NewInt64Metric(metricID MetricID, name, description, unit string, aggregation Aggregation, labels []string) (*Int64Metric, error) {
+	meter := otel.Meter("node-problem-detector")
+
+	otelMetric := &OTelInt64Metric{
+		name:        name,
+		description: description,
+		unit:        unit,
+		aggregation: aggregation,
+		labels:      labels,
+		meter:       meter,
+	}
+
+	var err error
+	switch aggregation {
+	case Sum:
+		otelMetric.counter, err = meter.Int64Counter(
+			name,
+			metric.WithDescription(description),
+			metric.WithUnit(unit),
+		)
+	case LastValue:
+		otelMetric.gauge, err = meter.Int64UpDownCounter(
+			name,
+			metric.WithDescription(description),
+			metric.WithUnit(unit),
+		)
+	default:
+		klog.Warningf("Unsupported aggregation type for metric %s: %v", name, aggregation)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Register metric mapping
+	MetricMap.AddMapping(metricID, name)
+
+	return otelMetric, nil
 }

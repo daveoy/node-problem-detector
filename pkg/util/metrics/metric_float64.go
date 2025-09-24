@@ -17,47 +17,48 @@ package metrics
 
 import (
 	"context"
-	"fmt"
 
-	"go.opencensus.io/stats"
-	"go.opencensus.io/stats/view"
-	"go.opencensus.io/tag"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
+	"k8s.io/klog/v2"
 )
 
-// Float64MetricRepresentation represents a snapshot of a float64 metrics.
-// This is used for inspecting metric internals.
+// Float64MetricRepresentation represents a parsed Prometheus metric
 type Float64MetricRepresentation struct {
-	// Name is the metric name.
-	Name string
-	// Labels contains all metric labels in key-value pair format.
+	Name   string
 	Labels map[string]string
-	// Value is the value of the metric.
-	Value float64
+	Value  float64
 }
 
-// Float64Metric represents an float64 metric.
-type Float64Metric struct {
-	name    string
-	measure *stats.Float64Measure
+// Float64MetricInterface is the interface for float64 metrics
+type Float64MetricInterface interface {
+	Record(labelValues map[string]string, value float64) error
 }
 
-// NewFloat64Metric create a Float64Metric metrics, returns nil when viewName is empty.
-func NewFloat64Metric(metricID MetricID, viewName string, description string, unit string, aggregation Aggregation, tagNames []string) (*Float64Metric, error) {
-	if viewName == "" {
-		return nil, nil
+// OTelFloat64Metric wraps OpenTelemetry float64 instruments
+type OTelFloat64Metric struct {
+	name        string
+	description string
+	unit        string
+	aggregation Aggregation
+	labels      []string
+	counter     metric.Float64Counter
+	gauge       metric.Float64UpDownCounter
+	meter       metric.Meter
+}
+
+// Record implements Float64MetricInterface
+func (m *OTelFloat64Metric) Record(labelValues map[string]string, value float64) error {
+	ctx := context.Background()
+
+	// Convert to OTel attributes
+	attrs := make([]attribute.KeyValue, 0, len(labelValues))
+	for k, v := range labelValues {
+		attrs = append(attrs, attribute.String(k, v))
 	}
 
-	MetricMap.AddMapping(metricID, viewName)
-
-	tagKeys, err := getTagKeysFromNames(tagNames)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create metric %q because of tag creation failure: %v", viewName, err)
-	}
-
-	var aggregationMethod *view.Aggregation
-	switch aggregation {
-	case LastValue:
-		aggregationMethod = view.LastValue()
+	switch m.aggregation {
 	case Sum:
 		aggregationMethod = view.Sum()
 	default:
@@ -92,11 +93,57 @@ func (metric *Float64Metric) Record(tags map[string]string, measurement float64)
 		if !ok {
 			return fmt.Errorf("referencing none existing tag %q in metric %q", tagName, metric.name)
 		}
-		mutators = append(mutators, tag.Upsert(tagKey, tagValue))
+	case LastValue:
+		if m.gauge != nil {
+			m.gauge.Add(ctx, value, metric.WithAttributes(attrs...))
+		}
+	default:
+		klog.Warningf("Unsupported aggregation type: %v", m.aggregation)
 	}
 
-	return stats.RecordWithTags(
-		context.Background(),
-		mutators,
-		metric.measure.M(measurement))
+	return nil
+}
+
+// Type aliases for backward compatibility
+type Float64Metric = OTelFloat64Metric
+
+// NewFloat64Metric creates a new Float64 metric using OpenTelemetry
+func NewFloat64Metric(metricID MetricID, name, description, unit string, aggregation Aggregation, labels []string) (*Float64Metric, error) {
+	meter := otel.Meter("node-problem-detector")
+
+	otelMetric := &OTelFloat64Metric{
+		name:        name,
+		description: description,
+		unit:        unit,
+		aggregation: aggregation,
+		labels:      labels,
+		meter:       meter,
+	}
+
+	var err error
+	switch aggregation {
+	case Sum:
+		otelMetric.counter, err = meter.Float64Counter(
+			name,
+			metric.WithDescription(description),
+			metric.WithUnit(unit),
+		)
+	case LastValue:
+		otelMetric.gauge, err = meter.Float64UpDownCounter(
+			name,
+			metric.WithDescription(description),
+			metric.WithUnit(unit),
+		)
+	default:
+		klog.Warningf("Unsupported aggregation type for metric %s: %v", name, aggregation)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Register metric mapping
+	MetricMap.AddMapping(metricID, name)
+
+	return otelMetric, nil
 }
