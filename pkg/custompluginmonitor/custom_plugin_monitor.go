@@ -95,13 +95,13 @@ func NewCustomPluginMonitorOrDie(configPath string) types.Monitor {
 func initializeProblemMetricsOrDie(rules []*cpmtypes.CustomRule) {
 	for _, rule := range rules {
 		if rule.Type == types.Perm {
-			err := problemmetrics.GetGlobalProblemMetricsManager().SetProblemGauge(rule.Condition, rule.Reason, false)
+			err := problemmetrics.GlobalProblemMetricsManager.SetProblemGauge(rule.Condition, rule.Reason, false)
 			if err != nil {
 				klog.Fatalf("Failed to initialize problem gauge metrics for problem %q, reason %q: %v",
 					rule.Condition, rule.Reason, err)
 			}
 		}
-		err := problemmetrics.GetGlobalProblemMetricsManager().IncrementProblemCounter(rule.Reason, 0)
+		err := problemmetrics.GlobalProblemMetricsManager.IncrementProblemCounter(rule.Reason, 0)
 		if err != nil {
 			klog.Fatalf("Failed to initialize problem counter metrics for %q: %v", rule.Reason, err)
 		}
@@ -257,7 +257,7 @@ func (c *customPluginMonitor) generateStatus(result cpmtypes.Result) *types.Stat
 	if *c.config.EnableMetricsReporting {
 		// Increment problem counter only for active problems which just got detected.
 		for _, event := range activeProblemEvents {
-			err := problemmetrics.GetGlobalProblemMetricsManager().IncrementProblemCounter(
+			err := problemmetrics.GlobalProblemMetricsManager.IncrementProblemCounter(
 				event.Reason, 1)
 			if err != nil {
 				klog.Errorf("Failed to update problem counter metrics for %q: %v",
@@ -265,7 +265,7 @@ func (c *customPluginMonitor) generateStatus(result cpmtypes.Result) *types.Stat
 			}
 		}
 		for _, condition := range c.conditions {
-			err := problemmetrics.GetGlobalProblemMetricsManager().SetProblemGauge(
+			err := problemmetrics.GlobalProblemMetricsManager.SetProblemGauge(
 				condition.Type, condition.Reason, condition.Status == types.True)
 			if err != nil {
 				klog.Errorf("Failed to update problem gauge metrics for problem %q, reason %q: %v",

@@ -28,18 +28,17 @@ import (
 
 // GlobalProblemMetricsManager is a singleton of ProblemMetricsManager,
 // which should be used to manage all problem-converted metrics across all
-// problem daemons.
+// problem daemons. This is initialized after the OpenTelemetry meter provider
+// is set up, not at package init time.
 var GlobalProblemMetricsManager *ProblemMetricsManager
-var initOnce sync.Once
 
-// GetGlobalProblemMetricsManager returns the global problem metrics manager,
-// initializing it if necessary. This ensures the manager is created after
-// the OpenTelemetry meter provider is initialized.
-func GetGlobalProblemMetricsManager() *ProblemMetricsManager {
-	initOnce.Do(func() {
-		GlobalProblemMetricsManager = NewProblemMetricsManagerOrDie()
-	})
-	return GlobalProblemMetricsManager
+// InitializeGlobalProblemMetricsManager creates the global problem metrics manager.
+// This should be called after the OpenTelemetry meter provider is initialized.
+func InitializeGlobalProblemMetricsManager() {
+	if GlobalProblemMetricsManager != nil {
+		return // Already initialized
+	}
+	GlobalProblemMetricsManager = NewProblemMetricsManagerOrDie()
 }
 
 // ProblemMetricsManager manages problem-converted metrics.
