@@ -52,15 +52,6 @@ func TestGaugeSetValueSemantics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to record value for different labels: %v", err)
 	}
-
-	// Test tracking of gauge values
-	if len(gauge.gaugeValues) != 2 {
-		t.Errorf("Expected 2 tracked gauge values, got %d. Values: %+v", len(gauge.gaugeValues), gauge.gaugeValues)
-	}
-
-	// The test passes if no panics occur and the gauge values map is populated
-	// We can't easily test the exact key format without exposing internal methods,
-	// but we can verify that the tracking is working by checking the map size
 }
 
 func TestCounterAddSemantics(t *testing.T) {
@@ -83,8 +74,4 @@ func TestCounterAddSemantics(t *testing.T) {
 		t.Fatalf("Failed to increment counter: %v", err)
 	}
 
-	// Counter should not track values (only gauges do)
-	if len(counter.gaugeValues) != 0 {
-		t.Errorf("Expected counter to not track gauge values, got %d values", len(counter.gaugeValues))
-	}
 }

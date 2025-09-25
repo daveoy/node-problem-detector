@@ -95,13 +95,13 @@ func NewLogMonitorOrDie(configPath string) types.Monitor {
 func initializeProblemMetricsOrDie(rules []systemlogtypes.Rule) {
 	for _, rule := range rules {
 		if rule.Type == types.Perm {
-			err := problemmetrics.GlobalProblemMetricsManager.SetProblemGauge(rule.Condition, rule.Reason, false)
+			err := problemmetrics.GetGlobalProblemMetricsManager().SetProblemGauge(rule.Condition, rule.Reason, false)
 			if err != nil {
 				klog.Fatalf("Failed to initialize problem gauge metrics for problem %q, reason %q: %v",
 					rule.Condition, rule.Reason, err)
 			}
 		}
-		err := problemmetrics.GlobalProblemMetricsManager.IncrementProblemCounter(rule.Reason, 0)
+		err := problemmetrics.GetGlobalProblemMetricsManager().IncrementProblemCounter(rule.Reason, 0)
 		if err != nil {
 			klog.Fatalf("Failed to initialize problem counter metrics for %q: %v", rule.Reason, err)
 		}
@@ -207,13 +207,13 @@ func (l *logMonitor) generateStatus(logs []*systemlogtypes.Log, rule systemlogty
 
 	if *l.config.EnableMetricsReporting {
 		for _, event := range events {
-			err := problemmetrics.GlobalProblemMetricsManager.IncrementProblemCounter(event.Reason, 1)
+			err := problemmetrics.GetGlobalProblemMetricsManager().IncrementProblemCounter(event.Reason, 1)
 			if err != nil {
 				klog.Errorf("Failed to update problem counter metrics for %q: %v", event.Reason, err)
 			}
 		}
 		for _, condition := range changedConditions {
-			err := problemmetrics.GlobalProblemMetricsManager.SetProblemGauge(
+			err := problemmetrics.GetGlobalProblemMetricsManager().SetProblemGauge(
 				condition.Type, condition.Reason, condition.Status == types.True)
 			if err != nil {
 				klog.Errorf("Failed to update problem gauge metrics for problem %q, reason %q: %v",
