@@ -30,7 +30,7 @@ import (
 	otelutil "k8s.io/node-problem-detector/pkg/util/otel"
 )
 
-type prometheusExporter struct {}
+type prometheusExporter struct{}
 
 // NewExporterOrDie creates an exporter to export metrics to Prometheus, panics if error occurs.
 func NewExporterOrDie(npdo *options.NodeProblemDetectorOptions) types.Exporter {
@@ -38,8 +38,10 @@ func NewExporterOrDie(npdo *options.NodeProblemDetectorOptions) types.Exporter {
 		return nil
 	}
 
-	// Create Prometheus exporter
-	promExporter, err := prometheus.New()
+	// Create Prometheus exporter with options to prevent automatic suffixing
+	promExporter, err := prometheus.New(
+		prometheus.WithoutCounterSuffixes(), // Don't add _total suffix to counters
+	)
 	if err != nil {
 		klog.Fatalf("Failed to create Prometheus exporter: %v", err)
 	}

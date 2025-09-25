@@ -20,7 +20,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
@@ -44,22 +43,16 @@ func GetResource() *resource.Resource {
 
 // createResource creates the OpenTelemetry resource configuration
 func createResource() *resource.Resource {
-	// Generate a UUID for service instance ID as per OpenTelemetry SDK recommendations
-	instanceID := uuid.New().String()
-
-	// Create resource with service info
+	// Create resource with minimal service info (no host/process details)
 	res, err := resource.New(
 		context.Background(),
 		resource.WithAttributes(
-			// Service identification (as per OTel SDK)
+			// Minimal service identification
 			semconv.ServiceNameKey.String("node-problem-detector"),
 			semconv.ServiceVersionKey.String(version.Version()),
-			semconv.ServiceInstanceIDKey.String(instanceID),
 			attribute.String("component", "node-problem-detector"),
 		),
 		resource.WithFromEnv(), // Allow environment overrides
-		resource.WithProcess(), // Add process information
-		resource.WithHost(),    // Add host information
 	)
 	if err != nil {
 		klog.Errorf("Failed to create OpenTelemetry resource: %v", err)
@@ -68,7 +61,7 @@ func createResource() *resource.Resource {
 			semconv.SchemaURL,
 			semconv.ServiceNameKey.String("node-problem-detector"),
 			semconv.ServiceVersionKey.String(version.Version()),
-			semconv.ServiceInstanceIDKey.String(instanceID),
+			attribute.String("component", "node-problem-detector"),
 		)
 	}
 
