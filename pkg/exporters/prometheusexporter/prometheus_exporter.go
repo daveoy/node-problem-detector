@@ -41,6 +41,7 @@ func NewExporterOrDie(npdo *options.NodeProblemDetectorOptions) types.Exporter {
 	// Create Prometheus exporter with options to prevent automatic suffixing
 	promExporter, err := prometheus.New(
 		prometheus.WithoutCounterSuffixes(), // Don't add _total suffix to counters
+		prometheus.WithoutUnits(), // Don't add unit-based suffixes like _ratio
 	)
 	if err != nil {
 		klog.Fatalf("Failed to create Prometheus exporter: %v", err)
