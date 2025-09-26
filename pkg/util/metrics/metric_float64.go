@@ -18,7 +18,7 @@ package metrics
 import (
 	"context"
 
-	"go.opentelemetry.io/otel"
+	otelutil "k8s.io/node-problem-detector/pkg/util/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"k8s.io/klog/v2"
@@ -44,7 +44,7 @@ type OTelFloat64Metric struct {
 	aggregation Aggregation
 	labels      []string
 	counter     metric.Float64Counter
-	gauge       metric.Float64UpDownCounter
+	gauge       metric.Float64Gauge
 	meter       metric.Meter
 }
 
@@ -60,42 +60,12 @@ func (m *OTelFloat64Metric) Record(labelValues map[string]string, value float64)
 
 	switch m.aggregation {
 	case Sum:
-		aggregationMethod = view.Sum()
-	default:
-		return nil, fmt.Errorf("unknown aggregation option %q", aggregation)
-	}
-
-	measure := stats.Float64(viewName, description, unit)
-	newView := &view.View{
-		Name:        viewName,
-		Measure:     measure,
-		Description: description,
-		Aggregation: aggregationMethod,
-		TagKeys:     tagKeys,
-	}
-	if err := view.Register(newView); err != nil {
-		return nil, fmt.Errorf("failed to register view for metric %q: %v", viewName, err)
-	}
-
-	metric := Float64Metric{viewName, measure}
-	return &metric, nil
-}
-
-// Record records a measurement for the metric, with provided tags as metric labels.
-func (metric *Float64Metric) Record(tags map[string]string, measurement float64) error {
-	var mutators []tag.Mutator
-
-	tagMapMutex.RLock()
-	defer tagMapMutex.RUnlock()
-
-	for tagName, tagValue := range tags {
-		tagKey, ok := tagMap[tagName]
-		if !ok {
-			return fmt.Errorf("referencing none existing tag %q in metric %q", tagName, metric.name)
+		if m.counter != nil {
+			m.counter.Add(ctx, value, metric.WithAttributes(attrs...))
 		}
 	case LastValue:
 		if m.gauge != nil {
-			m.gauge.Add(ctx, value, metric.WithAttributes(attrs...))
+			m.gauge.Record(ctx, value, metric.WithAttributes(attrs...))
 		}
 	default:
 		klog.Warningf("Unsupported aggregation type: %v", m.aggregation)
@@ -109,7 +79,7 @@ type Float64Metric = OTelFloat64Metric
 
 // NewFloat64Metric creates a new Float64 metric using OpenTelemetry
 func NewFloat64Metric(metricID MetricID, name, description, unit string, aggregation Aggregation, labels []string) (*Float64Metric, error) {
-	meter := otel.Meter("node-problem-detector")
+	meter := otelutil.GetGlobalMeter()
 
 	otelMetric := &OTelFloat64Metric{
 		name:        name,
@@ -129,7 +99,7 @@ func NewFloat64Metric(metricID MetricID, name, description, unit string, aggrega
 			metric.WithUnit(unit),
 		)
 	case LastValue:
-		otelMetric.gauge, err = meter.Float64UpDownCounter(
+		otelMetric.gauge, err = meter.Float64Gauge(
 			name,
 			metric.WithDescription(description),
 			metric.WithUnit(unit),

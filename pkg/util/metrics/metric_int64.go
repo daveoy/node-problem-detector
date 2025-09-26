@@ -61,38 +61,8 @@ func (m *OTelInt64Metric) Record(labelValues map[string]string, value int64) err
 
 	switch m.aggregation {
 	case Sum:
-		aggregationMethod = view.Sum()
-	default:
-		return nil, fmt.Errorf("unknown aggregation option %q", aggregation)
-	}
-
-	measure := stats.Int64(viewName, description, unit)
-	newView := &view.View{
-		Name:        viewName,
-		Measure:     measure,
-		Description: description,
-		Aggregation: aggregationMethod,
-		TagKeys:     tagKeys,
-	}
-	if err := view.Register(newView); err != nil {
-		return nil, fmt.Errorf("failed to register view for metric %q: %v", viewName, err)
-	}
-
-	metric := Int64Metric{viewName, measure}
-	return &metric, nil
-}
-
-// Record records a measurement for the metric, with provided tags as metric labels.
-func (metric *Int64Metric) Record(tags map[string]string, measurement int64) error {
-	var mutators []tag.Mutator
-
-	tagMapMutex.RLock()
-	defer tagMapMutex.RUnlock()
-
-	for tagName, tagValue := range tags {
-		tagKey, ok := tagMap[tagName]
-		if !ok {
-			return fmt.Errorf("referencing none existing tag %q in metric %q", tagName, metric.name)
+		if m.counter != nil {
+			m.counter.Add(ctx, value, metric.WithAttributes(attrs...))
 		}
 	case LastValue:
 		if m.gauge != nil {

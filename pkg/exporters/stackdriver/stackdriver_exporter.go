@@ -193,11 +193,6 @@ func (se *stackdriverExporter) populateMetadataOrDie() {
 	}
 }
 
-// ExportProblems does nothing.
-// Stackdriver exporter only exports metrics.
-func (se *stackdriverExporter) ExportProblems(status *types.Status) {
-}
-
 type commandLineOptions struct {
 	configPath string
 }
