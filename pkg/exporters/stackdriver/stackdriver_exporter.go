@@ -100,14 +100,13 @@ func getMetricTypeConversionFunction(customMetricPrefix string) func(string) str
 		fallbackMetricType := ""
 		if customMetricPrefix != "" {
 			// Example fallbackMetricType: custom.googleapis.com/npd/host/uptime
-			fallbackMetricType = filepath.Join("%s/%s", customMetricPrefix, metricName)
+			fallbackMetricType = filepath.Join(customMetricPrefix, metricName)
 		}
 
 		metricID, ok := metrics.MetricMap.ViewNameToMetricID(metricName)
 		if !ok {
 			return fallbackMetricType
 		}
-
 		stackdriverMetricType, ok := NPDMetricToSDMetric[metricID]
 		if !ok {
 			return fallbackMetricType
@@ -130,7 +129,6 @@ func (se *stackdriverExporter) setupOTelExporterOrDie() {
 		klog.Fatalf("Failed to create Google Cloud Monitoring exporter: %v", err)
 	}
 
-	// Create periodic reader that exports metrics at regular intervals
 	exportPeriod, err := time.ParseDuration(se.config.ExportPeriod)
 	if err != nil {
 		klog.Fatalf("Failed to parse ExportPeriod %q: %v", se.config.ExportPeriod, err)
@@ -141,7 +139,7 @@ func (se *stackdriverExporter) setupOTelExporterOrDie() {
 		metric.WithInterval(exportPeriod),
 	)
 
-	// Register the GCP reader with the global meter provider
+	// register with the global meter provider
 	otelutil.AddMetricReader(reader)
 
 	klog.Infof("Google Cloud Monitoring exporter configured for project %s", se.config.GCEMetadata.ProjectID)

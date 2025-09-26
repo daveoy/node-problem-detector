@@ -50,8 +50,6 @@ func NewExporterOrDie(npdo *options.NodeProblemDetectorOptions) types.Exporter {
 	// register with the global meter provider
 	otelutil.AddMetricReader(promExporter)
 
-	pe := &prometheusExporter{}
-
 	addr := net.JoinHostPort(npdo.PrometheusServerAddress, strconv.Itoa(npdo.PrometheusServerPort))
 	go func() {
 		mux := http.NewServeMux()
@@ -62,7 +60,7 @@ func NewExporterOrDie(npdo *options.NodeProblemDetectorOptions) types.Exporter {
 	}()
 
 	klog.Infof("Prometheus exporter started on %s", addr)
-	return pe
+	return &prometheusExporter{}
 }
 
 // ExportProblems does nothing.
