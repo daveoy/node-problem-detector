@@ -36,8 +36,8 @@ func TestGetResource(t *testing.T) {
 	attrs := resource.Attributes()
 
 	// Check service attributes
-	serviceName := ""
-	serviceVersion := ""
+	serviceName := "node-problem-detector"
+	serviceVersion := "v1.2.3"
 
 	for _, attr := range attrs {
 		switch attr.Key {
