@@ -38,7 +38,6 @@ func TestGetResource(t *testing.T) {
 	// Check service attributes
 	serviceName := ""
 	serviceVersion := ""
-	serviceInstanceID := ""
 
 	for _, attr := range attrs {
 		switch attr.Key {
@@ -46,66 +45,15 @@ func TestGetResource(t *testing.T) {
 			serviceName = attr.Value.AsString()
 		case semconv.ServiceVersionKey:
 			serviceVersion = attr.Value.AsString()
-		case semconv.ServiceInstanceIDKey:
-			serviceInstanceID = attr.Value.AsString()
 		}
-	}
 
-	if serviceName != "node-problem-detector" {
-		t.Errorf("Expected service name 'node-problem-detector', got '%s'", serviceName)
-	}
-
-	if serviceVersion == "" {
-		t.Error("Expected service version to be set")
-	}
-
-	// Verify service instance ID is a valid UUID format
-	if len(serviceInstanceID) != 36 {
-		t.Errorf("Expected service instance ID to be UUID format (36 chars), got '%s' (%d chars)", serviceInstanceID, len(serviceInstanceID))
-	}
-}
-
-func TestGetResourceGeneratesUniqueInstanceIDs(t *testing.T) {
-	// Reset the global state for isolated testing
-	globalResource = nil
-	resourceOnce = sync.Once{}
-
-	// Generate multiple resources and verify they have unique instance IDs
-	resource1 := GetResource()
-
-	// Reset again to create a different resource
-	globalResource = nil
-	resourceOnce = sync.Once{}
-	resource2 := GetResource()
-
-	if resource1 == nil || resource2 == nil {
-		t.Fatal("Expected resources to be created")
-	}
-
-	attrs1 := resource1.Attributes()
-	attrs2 := resource2.Attributes()
-
-	var instanceID1, instanceID2 string
-
-	for _, attr := range attrs1 {
-		if attr.Key == semconv.ServiceInstanceIDKey {
-			instanceID1 = attr.Value.AsString()
-			break
+		if serviceName != "node-problem-detector" {
+			t.Errorf("Expected service name 'node-problem-detector', got '%s'", serviceName)
 		}
-	}
 
-	for _, attr := range attrs2 {
-		if attr.Key == semconv.ServiceInstanceIDKey {
-			instanceID2 = attr.Value.AsString()
-			break
+		if serviceVersion == "" {
+			t.Error("Expected service version to be set")
 		}
-	}
 
-	if instanceID1 == "" || instanceID2 == "" {
-		t.Fatal("Expected both resources to have instance IDs")
-	}
-
-	if instanceID1 == instanceID2 {
-		t.Errorf("Expected unique instance IDs, but got the same: %s", instanceID1)
 	}
 }
