@@ -17,7 +17,6 @@ limitations under the License.
 package otel
 
 import (
-	"os"
 	"sync"
 	"testing"
 
@@ -29,10 +28,6 @@ func TestGetResource(t *testing.T) {
 	globalResource = nil
 	resourceOnce = sync.Once{}
 
-	// Test with NODE_NAME environment variable
-	os.Setenv("NODE_NAME", "test-node")
-	defer os.Unsetenv("NODE_NAME")
-
 	resource := GetResource()
 	if resource == nil {
 		t.Fatal("Expected resource to be created, got nil")
@@ -42,7 +37,6 @@ func TestGetResource(t *testing.T) {
 
 	// Check service attributes
 	serviceName := ""
-	nodeName := ""
 	serviceVersion := ""
 	serviceInstanceID := ""
 
@@ -50,8 +44,6 @@ func TestGetResource(t *testing.T) {
 		switch attr.Key {
 		case semconv.ServiceNameKey:
 			serviceName = attr.Value.AsString()
-		case "node.name":
-			nodeName = attr.Value.AsString()
 		case semconv.ServiceVersionKey:
 			serviceVersion = attr.Value.AsString()
 		case semconv.ServiceInstanceIDKey:
@@ -61,10 +53,6 @@ func TestGetResource(t *testing.T) {
 
 	if serviceName != "node-problem-detector" {
 		t.Errorf("Expected service name 'node-problem-detector', got '%s'", serviceName)
-	}
-
-	if nodeName != "test-node" {
-		t.Errorf("Expected node name 'test-node', got '%s'", nodeName)
 	}
 
 	if serviceVersion == "" {
@@ -77,35 +65,6 @@ func TestGetResource(t *testing.T) {
 	}
 }
 
-func TestGetResourceWithoutNodeName(t *testing.T) {
-	// Reset the global state for isolated testing
-	globalResource = nil
-	resourceOnce = sync.Once{}
-
-	// Ensure NODE_NAME is not set
-	os.Unsetenv("NODE_NAME")
-
-	resource := GetResource()
-	if resource == nil {
-		t.Fatal("Expected resource to be created, got nil")
-	}
-
-	attrs := resource.Attributes()
-
-	// Check that some node name was set (hostname fallback)
-	nodeName := ""
-	for _, attr := range attrs {
-		if string(attr.Key) == "node.name" {
-			nodeName = attr.Value.AsString()
-			break
-		}
-	}
-
-	if nodeName == "" {
-		t.Error("Expected node name to be set from hostname fallback")
-	}
-}
-
 func TestGetResourceGeneratesUniqueInstanceIDs(t *testing.T) {
 	// Reset the global state for isolated testing
 	globalResource = nil
@@ -113,7 +72,7 @@ func TestGetResourceGeneratesUniqueInstanceIDs(t *testing.T) {
 
 	// Generate multiple resources and verify they have unique instance IDs
 	resource1 := GetResource()
-	
+
 	// Reset again to create a different resource
 	globalResource = nil
 	resourceOnce = sync.Once{}
