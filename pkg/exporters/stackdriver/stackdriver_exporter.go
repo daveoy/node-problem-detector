@@ -18,8 +18,8 @@ package stackdriverexporter
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
+	"path/filepath"
 	"reflect"
 	"time"
 
@@ -100,30 +100,24 @@ func getMetricTypeConversionFunction(customMetricPrefix string) func(string) str
 		fallbackMetricType := ""
 		if customMetricPrefix != "" {
 			// Example fallbackMetricType: custom.googleapis.com/npd/host/uptime
-			fallbackMetricType = fmt.Sprintf("%s/%s", customMetricPrefix, metricName)
+			fallbackMetricType = filepath.Join("%s/%s", customMetricPrefix, metricName)
 		}
 
-		// Convert metric name to MetricID and look up Stackdriver metric type
 		metricID, ok := metrics.MetricMap.ViewNameToMetricID(metricName)
 		if !ok {
 			return fallbackMetricType
 		}
 
-		if stackdriverMetricType, ok := NPDMetricToSDMetric[metricID]; ok {
-			return stackdriverMetricType
+		stackdriverMetricType, ok := NPDMetricToSDMetric[metricID]
+		if !ok {
+			return fallbackMetricType
 		}
-		return fallbackMetricType
+		return stackdriverMetricType
 	}
 }
 
 type stackdriverExporter struct {
 	config seconfig.StackdriverExporterConfig
-}
-
-// ExportProblems does nothing.
-// Stackdriver exporter only exports metrics.
-func (se *stackdriverExporter) ExportProblems(status *types.Status) {
-	return
 }
 
 func (se *stackdriverExporter) setupOTelExporterOrDie() {
@@ -191,6 +185,11 @@ func (se *stackdriverExporter) populateMetadataOrDie() {
 	} else {
 		klog.Errorf("Failed to populate GCE metadata: %v", err)
 	}
+}
+
+// ExportProblems does nothing.
+// Stackdriver exporter only exports metrics.
+func (se *stackdriverExporter) ExportProblems(status *types.Status) {
 }
 
 type commandLineOptions struct {

@@ -1,5 +1,5 @@
 /*
-Copyright 2025 The Kubernetes Authors All rights reserved.
+Copyright 2019 The Kubernetes Authors All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -41,19 +41,17 @@ func NewExporterOrDie(npdo *options.NodeProblemDetectorOptions) types.Exporter {
 	// Create Prometheus exporter with options to prevent automatic suffixing
 	promExporter, err := prometheus.New(
 		prometheus.WithoutCounterSuffixes(), // Don't add _total suffix to counters
-		prometheus.WithoutUnits(), // Don't add unit-based suffixes like _ratio
+		prometheus.WithoutUnits(),           // Don't add unit-based suffixes like _ratio
 	)
 	if err != nil {
 		klog.Fatalf("Failed to create Prometheus exporter: %v", err)
 	}
 
-	// Register the Prometheus reader with the global meter provider
-	// The prometheus.Exporter implements sdkmetric.Reader interface
+	// register with the global meter provider
 	otelutil.AddMetricReader(promExporter)
 
 	pe := &prometheusExporter{}
 
-	// Start HTTP server for Prometheus scraping
 	addr := net.JoinHostPort(npdo.PrometheusServerAddress, strconv.Itoa(npdo.PrometheusServerPort))
 	go func() {
 		mux := http.NewServeMux()

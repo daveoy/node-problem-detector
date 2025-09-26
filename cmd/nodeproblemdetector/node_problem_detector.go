@@ -55,21 +55,18 @@ func npdMain(ctx context.Context, npdo *options.NodeProblemDetectorOptions) erro
 		defaultExporters = append(defaultExporters, pe)
 		klog.Info("Prometheus exporter started.")
 	}
+	plugableExporters := exporters.NewExporters()
 
 	// Initialize OpenTelemetry meter provider with all registered readers
 	// This must be called after all exporters have been created and registered their readers
 	otelutil.InitializeMeterProvider()
-
-	// Initialize the global problem metrics manager after the meter provider is ready
 	problemmetrics.InitializeGlobalProblemMetricsManager()
 
-	// Now initialize problem daemons (which need the metrics manager to be ready).
+	// Initialize problem daemons.
 	problemDaemons := problemdaemon.NewProblemDaemons(npdo.MonitorConfigPaths)
 	if len(problemDaemons) == 0 {
 		klog.Fatalf("No problem daemon is configured")
 	}
-
-	plugableExporters := exporters.NewExporters()
 
 	npdExporters := []types.Exporter{}
 	npdExporters = append(npdExporters, defaultExporters...)

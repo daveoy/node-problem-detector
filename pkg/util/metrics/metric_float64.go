@@ -18,64 +18,30 @@ package metrics
 import (
 	"context"
 
-	otelutil "k8s.io/node-problem-detector/pkg/util/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"k8s.io/klog/v2"
+	otelutil "k8s.io/node-problem-detector/pkg/util/otel"
 )
 
-// Float64MetricRepresentation represents a parsed Prometheus metric
+// Float64MetricRepresentation represents a snapshot of a float64 metrics.
+// This is used for inspecting metric internals.
 type Float64MetricRepresentation struct {
-	Name   string
+	// Name is the metric name.
+	Name string
+	// Labels contains all metric labels in key-value pair format.
 	Labels map[string]string
-	Value  float64
+	// Value is the value of the metric.
+	Value float64
 }
 
-// Float64MetricInterface is the interface for float64 metrics
+// Float64Metric represents an float64 metric.
+// Type alias added for backward compatibility
+type Float64Metric = OTelFloat64Metric
+
 type Float64MetricInterface interface {
 	Record(labelValues map[string]string, value float64) error
 }
-
-// OTelFloat64Metric wraps OpenTelemetry float64 instruments
-type OTelFloat64Metric struct {
-	name        string
-	description string
-	unit        string
-	aggregation Aggregation
-	labels      []string
-	counter     metric.Float64Counter
-	gauge       metric.Float64Gauge
-	meter       metric.Meter
-}
-
-// Record implements Float64MetricInterface
-func (m *OTelFloat64Metric) Record(labelValues map[string]string, value float64) error {
-	ctx := context.Background()
-
-	// Convert to OTel attributes
-	attrs := make([]attribute.KeyValue, 0, len(labelValues))
-	for k, v := range labelValues {
-		attrs = append(attrs, attribute.String(k, v))
-	}
-
-	switch m.aggregation {
-	case Sum:
-		if m.counter != nil {
-			m.counter.Add(ctx, value, metric.WithAttributes(attrs...))
-		}
-	case LastValue:
-		if m.gauge != nil {
-			m.gauge.Record(ctx, value, metric.WithAttributes(attrs...))
-		}
-	default:
-		klog.Warningf("Unsupported aggregation type: %v", m.aggregation)
-	}
-
-	return nil
-}
-
-// Type aliases for backward compatibility
-type Float64Metric = OTelFloat64Metric
 
 // NewFloat64Metric creates a new Float64 metric using OpenTelemetry
 func NewFloat64Metric(metricID MetricID, name, description, unit string, aggregation Aggregation, labels []string) (*Float64Metric, error) {
@@ -116,4 +82,42 @@ func NewFloat64Metric(metricID MetricID, name, description, unit string, aggrega
 	MetricMap.AddMapping(metricID, name)
 
 	return otelMetric, nil
+}
+
+// OTelFloat64Metric wraps OpenTelemetry float64 instruments
+type OTelFloat64Metric struct {
+	name        string
+	description string
+	unit        string
+	aggregation Aggregation
+	labels      []string
+	counter     metric.Float64Counter
+	gauge       metric.Float64Gauge
+	meter       metric.Meter
+}
+
+// Record implements Float64MetricInterface
+func (m *OTelFloat64Metric) Record(labelValues map[string]string, value float64) error {
+	ctx := context.Background()
+
+	// Convert to OTel attributes
+	attrs := make([]attribute.KeyValue, 0, len(labelValues))
+	for k, v := range labelValues {
+		attrs = append(attrs, attribute.String(k, v))
+	}
+
+	switch m.aggregation {
+	case Sum:
+		if m.counter != nil {
+			m.counter.Add(ctx, value, metric.WithAttributes(attrs...))
+		}
+	case LastValue:
+		if m.gauge != nil {
+			m.gauge.Record(ctx, value, metric.WithAttributes(attrs...))
+		}
+	default:
+		klog.Warningf("Unsupported aggregation type: %v", m.aggregation)
+	}
+
+	return nil
 }

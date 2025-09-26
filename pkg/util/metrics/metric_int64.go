@@ -25,61 +25,24 @@ import (
 	otelutil "k8s.io/node-problem-detector/pkg/util/otel"
 )
 
-// Int64MetricRepresentation represents a parsed Prometheus metric with int64 value
+// Int64MetricRepresentation represents a snapshot of an int64 metrics.
+// This is used for inspecting metric internals.
 type Int64MetricRepresentation struct {
-	Name   string
+	// Name is the metric name.
+	Name string
+	// Labels contains all metric labels in key-value pair format.
 	Labels map[string]string
-	Value  int64
+	// Value is the value of the metric.
+	Value int64
 }
 
-// Int64MetricInterface is the interface for int64 metrics
+// Int64Metric represents an int64 metric.
+// Type alias added for backward compatibility
+type Int64Metric = OTelInt64Metric
+
 type Int64MetricInterface interface {
 	Record(labelValues map[string]string, value int64) error
 }
-
-// OTelInt64Metric wraps OpenTelemetry int64 instruments
-type OTelInt64Metric struct {
-	name        string
-	description string
-	unit        string
-	aggregation Aggregation
-	labels      []string
-	counter     metric.Int64Counter
-	gauge       metric.Int64Gauge
-	meter       metric.Meter
-}
-
-// Record implements Int64MetricInterface
-func (m *OTelInt64Metric) Record(labelValues map[string]string, value int64) error {
-	ctx := context.Background()
-
-	// Convert to OTel attributes
-	attrs := make([]attribute.KeyValue, 0, len(labelValues))
-	for k, v := range labelValues {
-		attrs = append(attrs, attribute.String(k, v))
-	}
-
-	switch m.aggregation {
-	case Sum:
-		if m.counter != nil {
-			m.counter.Add(ctx, value, metric.WithAttributes(attrs...))
-		}
-	case LastValue:
-		if m.gauge != nil {
-			// For synchronous gauge, directly record the value
-			m.gauge.Record(ctx, value, metric.WithAttributes(attrs...))
-		}
-	default:
-		klog.Warningf("Unsupported aggregation type: %v", m.aggregation)
-	}
-
-	return nil
-}
-
-
-
-// Type aliases for backward compatibility
-type Int64Metric = OTelInt64Metric
 
 // NewInt64Metric creates a new Int64 metric using OpenTelemetry
 func NewInt64Metric(metricID MetricID, name, description, unit string, aggregation Aggregation, labels []string) (*Int64Metric, error) {
@@ -121,4 +84,43 @@ func NewInt64Metric(metricID MetricID, name, description, unit string, aggregati
 	MetricMap.AddMapping(metricID, name)
 
 	return otelMetric, nil
+}
+
+// OTelInt64Metric wraps OpenTelemetry int64 instruments
+type OTelInt64Metric struct {
+	name        string
+	description string
+	unit        string
+	aggregation Aggregation
+	labels      []string
+	counter     metric.Int64Counter
+	gauge       metric.Int64Gauge
+	meter       metric.Meter
+}
+
+// Record implements Int64MetricInterface
+func (m *OTelInt64Metric) Record(labelValues map[string]string, value int64) error {
+	ctx := context.Background()
+
+	// Convert to OTel attributes
+	attrs := make([]attribute.KeyValue, 0, len(labelValues))
+	for k, v := range labelValues {
+		attrs = append(attrs, attribute.String(k, v))
+	}
+
+	switch m.aggregation {
+	case Sum:
+		if m.counter != nil {
+			m.counter.Add(ctx, value, metric.WithAttributes(attrs...))
+		}
+	case LastValue:
+		if m.gauge != nil {
+			// For synchronous gauge, directly record the value
+			m.gauge.Record(ctx, value, metric.WithAttributes(attrs...))
+		}
+	default:
+		klog.Warningf("Unsupported aggregation type: %v", m.aggregation)
+	}
+
+	return nil
 }
