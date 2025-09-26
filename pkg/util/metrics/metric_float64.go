@@ -21,6 +21,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"k8s.io/klog/v2"
+
 	otelutil "k8s.io/node-problem-detector/pkg/util/otel"
 )
 

@@ -49,5 +49,4 @@ func TestGetResource(t *testing.T) {
 	if serviceVersion == "" {
 		t.Error("Expected service version to be set")
 	}
-
 }

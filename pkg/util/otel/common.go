@@ -18,7 +18,7 @@ package otel
 
 import (
 	"sync"
-	
+
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -57,7 +57,7 @@ func InitializeMeterProvider() *sdkmetric.MeterProvider {
 
 		// Create meter provider options
 		opts := []sdkmetric.Option{sdkmetric.WithResource(resource)}
-		
+
 		// Add all registered readers
 		for _, reader := range readers {
 			opts = append(opts, sdkmetric.WithReader(reader))
@@ -69,7 +69,7 @@ func InitializeMeterProvider() *sdkmetric.MeterProvider {
 		// Set as global meter provider
 		otel.SetMeterProvider(globalMeterProvider)
 
-		klog.Infof("OpenTelemetry meter provider initialized with %d readers and resource: %v", 
+		klog.Infof("OpenTelemetry meter provider initialized with %d readers and resource: %v",
 			len(readers), resource.Attributes())
 	})
 	return globalMeterProvider
@@ -82,7 +82,6 @@ func GetMeterProvider() *sdkmetric.MeterProvider {
 	}
 	return globalMeterProvider
 }
-
 
 // MeterName is the standard meter name used across the application
 const MeterName = "node-problem-detector"

@@ -73,5 +73,4 @@ func TestCounterAddSemantics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to increment counter: %v", err)
 	}
-
 }
