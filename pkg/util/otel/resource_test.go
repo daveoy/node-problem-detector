@@ -17,17 +17,12 @@ limitations under the License.
 package otel
 
 import (
-	"sync"
 	"testing"
 
 	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
 )
 
 func TestGetResource(t *testing.T) {
-	// Reset the global state for isolated testing
-	globalResource = nil
-	resourceOnce = sync.Once{}
-
 	resource := GetResource()
 	if resource == nil {
 		t.Fatal("Expected resource to be created, got nil")
@@ -36,8 +31,8 @@ func TestGetResource(t *testing.T) {
 	attrs := resource.Attributes()
 
 	// Check service attributes
-	serviceName := "node-problem-detector"
-	serviceVersion := "v1.2.3"
+	var serviceName string
+	var serviceVersion string
 
 	for _, attr := range attrs {
 		switch attr.Key {
@@ -46,14 +41,13 @@ func TestGetResource(t *testing.T) {
 		case semconv.ServiceVersionKey:
 			serviceVersion = attr.Value.AsString()
 		}
-
-		if serviceName != "node-problem-detector" {
-			t.Errorf("Expected service name 'node-problem-detector', got '%s'", serviceName)
-		}
-
-		if serviceVersion == "" {
-			t.Error("Expected service version to be set")
-		}
-
 	}
+	if serviceName != "node-problem-detector" {
+		t.Errorf("Expected service name 'node-problem-detector', got '%s'", serviceName)
+	}
+
+	if serviceVersion == "" {
+		t.Error("Expected service version to be set")
+	}
+
 }
