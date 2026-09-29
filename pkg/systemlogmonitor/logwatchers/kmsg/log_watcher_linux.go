@@ -65,11 +65,21 @@ func NewKmsgWatcher(cfg types.WatcherConfig) types.LogWatcher {
 		tomb:      tomb.NewTomb(),
 		// Arbitrary capacity
 		logCh:     make(chan *logtypes.Log, 100),
-		newParser: kmsgparser.NewParser,
+		newParser: newKmsgParser,
 	}
 }
 
 var _ types.WatcherCreateFunc = NewKmsgWatcher
+
+// newKmsgParser creates a kmsgparser that reports its internal errors through klog.
+func newKmsgParser() (kmsgparser.Parser, error) {
+	parser, err := kmsgparser.NewParser()
+	if err != nil {
+		return nil, err
+	}
+	parser.SetLogger(&kmsgParserLogger{})
+	return parser, nil
+}
 
 func (k *kernelLogWatcher) Watch() (<-chan *logtypes.Log, error) {
 	if k.kmsgParser == nil {
@@ -92,6 +102,7 @@ func (k *kernelLogWatcher) Stop() {
 
 // watchLoop is the main watch loop of kernel log watcher.
 func (k *kernelLogWatcher) watchLoop() {
+	k.sendInternal("Entering watch loop for kernel log")
 	kmsgs := k.kmsgParser.Parse()
 	defer func() {
 		// kmsgParser is nil when stopping interrupted a restart.
@@ -125,6 +136,9 @@ func (k *kernelLogWatcher) watchLoop() {
 				kmsgs, restarted = k.retryCreateParser()
 				if !restarted {
 					// Stopping was signaled
+					return
+				}
+				if !k.sendInternal("Reviving kmsg parser") {
 					return
 				}
 				continue
@@ -199,5 +213,16 @@ func (k *kernelLogWatcher) retryCreateParser() (<-chan kmsgparser.Message, bool)
 			return nil, false
 		case <-time.After(retryDelay):
 		}
+	}
+}
+
+// sendInternal sends an npd-internal log line so rules can count watcher events.
+// It returns false if stopping was signaled before the line was sent.
+func (k *kernelLogWatcher) sendInternal(msg string) bool {
+	select {
+	case k.logCh <- &logtypes.Log{Message: "[npd-internal] " + msg, Timestamp: time.Now()}:
+		return true
+	case <-k.tomb.Stopping():
+		return false
 	}
 }

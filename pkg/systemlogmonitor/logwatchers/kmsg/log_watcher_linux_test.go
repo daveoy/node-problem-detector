@@ -218,6 +218,7 @@ func TestWatch(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer w.Stop()
+			expectInternalLog(t, logCh, "Entering watch loop for kernel log")
 			for _, expected := range tc.logs {
 				got := <-logCh
 				assert.Equal(t, &expected, got)
@@ -318,6 +319,7 @@ func TestStopClosesParserCleanly(t *testing.T) {
 
 			// Drain all messages so the parser goroutine has finished sending
 			// before we Stop. Keeps the test deterministic and focused on Stop.
+			expectInternalLog(t, logCh, "Entering watch loop for kernel log")
 			for _, expected := range tc.kmsgs {
 				select {
 				case got := <-logCh:
@@ -383,12 +385,16 @@ func TestWatcherRestartsOnUnexpectedChannelClose(t *testing.T) {
 	logCh, err := w.Watch()
 	assert.NoError(t, err)
 
+	expectInternalLog(t, logCh, "Entering watch loop for kernel log")
+
 	select {
 	case log := <-logCh:
 		assert.Equal(t, "before-restart", log.Message)
 	case <-time.After(time.Second):
 		t.Fatal("timeout waiting for message before restart")
 	}
+
+	expectInternalLog(t, logCh, "Reviving kmsg parser")
 
 	select {
 	case log := <-logCh:
@@ -460,12 +466,7 @@ func TestWatcherRateLimitsRestarts(t *testing.T) {
 		t.Fatal("timeout waiting for Stop() during restart rate-limit wait")
 	}
 
-	select {
-	case _, ok := <-logCh:
-		assert.False(t, ok, "log channel should be closed after Stop()")
-	case <-time.After(time.Second):
-		t.Fatal("timeout waiting for log channel to close after Stop()")
-	}
+	expectClosedAfterDrain(t, logCh)
 }
 
 // TestStopDuringRestartClosesOldParserOnce verifies that when Stop() arrives
@@ -510,12 +511,7 @@ func TestStopDuringRestartClosesOldParserOnce(t *testing.T) {
 
 	w.Stop()
 
-	select {
-	case _, ok := <-logCh:
-		assert.False(t, ok, "log channel should be closed after Stop()")
-	case <-time.After(time.Second):
-		t.Fatal("timeout waiting for log channel to close after Stop()")
-	}
+	expectClosedAfterDrain(t, logCh)
 
 	assert.Equal(t, 1, mock.CloseCallCount(),
 		"old parser must be closed exactly once, not again by watchLoop's defer")
@@ -605,6 +601,7 @@ func TestWatcherProcessesMessageContent(t *testing.T) {
 			assert.NoError(t, err)
 			defer w.Stop()
 
+			expectInternalLog(t, logCh, "Entering watch loop for kernel log")
 			for _, want := range tc.expected {
 				select {
 				case got := <-logCh:
@@ -614,5 +611,32 @@ func TestWatcherProcessesMessageContent(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// expectInternalLog asserts that the next log on logCh is the given npd-internal message.
+func expectInternalLog(t *testing.T, logCh <-chan *logtypes.Log, msg string) {
+	t.Helper()
+	select {
+	case log := <-logCh:
+		assert.Equal(t, "[npd-internal] "+msg, log.Message)
+	case <-time.After(time.Second):
+		t.Fatalf("timeout waiting for internal log %q", msg)
+	}
+}
+
+// expectClosedAfterDrain drains any buffered logs and asserts that logCh is then closed.
+func expectClosedAfterDrain(t *testing.T, logCh <-chan *logtypes.Log) {
+	t.Helper()
+	timeout := time.After(time.Second)
+	for {
+		select {
+		case _, ok := <-logCh:
+			if !ok {
+				return
+			}
+		case <-timeout:
+			t.Fatal("timeout waiting for log channel to close after Stop()")
+		}
 	}
 }
