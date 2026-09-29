@@ -62,6 +62,8 @@ func (f *FakeProblemClient) AssertConditions(expected []v1.NodeCondition) error 
 
 // DeleteDeprecatedConditions is a fake mimic of DeleteDeprecatedConditions, it only delete the internal condition cache.
 func (f *FakeProblemClient) DeleteDeprecatedConditions(ctx context.Context, types []string) error {
+	f.Lock()
+	defer f.Unlock()
 	if err, ok := f.errors["DeleteDeprecatedConditions"]; ok {
 		return err
 	}

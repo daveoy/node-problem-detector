@@ -222,3 +222,123 @@ func TestSetConditionsCachesNodeUID(t *testing.T) {
 		t.Errorf("expected SetConditions to cache UID %q, got %q", testNodeUID, got)
 	}
 }
+
+// newProblemClientWithNodeConditions returns a client that talks to a server
+// which serves the test node with the given conditions. It records every
+// status update, and fails the first failUpdates of them.
+func newProblemClientWithNodeConditions(t *testing.T, conditions []v1.NodeCondition, failUpdates int) (*nodeProblemClient, *[]*v1.Node) {
+	t.Helper()
+
+	var updates []*v1.Node
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		node := &v1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: testNode, UID: testNodeUID},
+			Status:     v1.NodeStatus{Conditions: conditions},
+		}
+		if r.Method == http.MethodPut {
+			updated := &v1.Node{}
+			if err := json.NewDecoder(r.Body).Decode(updated); err != nil {
+				t.Errorf("failed to decode the node update: %v", err)
+			}
+			updates = append(updates, updated)
+			if len(updates) <= failUpdates {
+				http.Error(w, "injected failure", http.StatusInternalServerError)
+				return
+			}
+			node = updated
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(node); err != nil {
+			t.Errorf("failed to encode the node: %v", err)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	// Send JSON so the server can decode the update.
+	coreClient, err := typedcorev1.NewForConfig(&rest.Config{
+		Host:          server.URL,
+		ContentConfig: rest.ContentConfig{ContentType: "application/json"},
+	})
+	if err != nil {
+		t.Fatalf("failed to create the core client: %v", err)
+	}
+
+	client := newFakeProblemClient()
+	client.client = coreClient
+	return client, &updates
+}
+
+func conditionTypes(conditions []v1.NodeCondition) []v1.NodeConditionType {
+	types := []v1.NodeConditionType{}
+	for _, condition := range conditions {
+		types = append(types, condition.Type)
+	}
+	return types
+}
+
+func TestDeleteDeprecatedConditions(t *testing.T) {
+	existing := []v1.NodeCondition{
+		{Type: "Ready", Status: v1.ConditionTrue},
+		{Type: "OldCondition", Status: v1.ConditionFalse},
+		{Type: "KernelDeadlock", Status: v1.ConditionFalse},
+		{Type: "OtherOldCondition", Status: v1.ConditionTrue},
+	}
+
+	testCases := []struct {
+		name            string
+		deprecated      []string
+		failUpdates     int
+		expectedUpdates int
+		expectedTypes   []v1.NodeConditionType
+	}{
+		{
+			name:            "deletes only the deprecated conditions",
+			deprecated:      []string{"OldCondition", "OtherOldCondition"},
+			expectedUpdates: 1,
+			expectedTypes:   []v1.NodeConditionType{"Ready", "KernelDeadlock"},
+		},
+		{
+			name:            "skips the update when no deprecated conditions are present",
+			deprecated:      []string{"NotPresent"},
+			expectedUpdates: 0,
+		},
+		{
+			name:            "skips the update when no deprecated types are given",
+			deprecated:      []string{},
+			expectedUpdates: 0,
+		},
+		{
+			name:            "retries a failed update",
+			deprecated:      []string{"OldCondition"},
+			failUpdates:     1,
+			expectedUpdates: 2,
+			expectedTypes:   []v1.NodeConditionType{"Ready", "KernelDeadlock", "OtherOldCondition"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			client, updates := newProblemClientWithNodeConditions(t, existing, tc.failUpdates)
+
+			err := client.DeleteDeprecatedConditions(context.Background(), tc.deprecated)
+			assert.NoError(t, err)
+			assert.Len(t, *updates, tc.expectedUpdates)
+			if tc.expectedUpdates > 0 {
+				last := (*updates)[len(*updates)-1]
+				assert.Equal(t, tc.expectedTypes, conditionTypes(last.Status.Conditions))
+			}
+		})
+	}
+}
+
+func TestFakeDeleteDeprecatedConditions(t *testing.T) {
+	fake := NewFakeProblemClient()
+	conditions := []v1.NodeCondition{
+		{Type: "Ready", Status: v1.ConditionTrue},
+		{Type: "OldCondition", Status: v1.ConditionFalse},
+	}
+	assert.NoError(t, fake.SetConditions(context.Background(), conditions))
+
+	assert.NoError(t, fake.DeleteDeprecatedConditions(context.Background(), []string{"OldCondition"}))
+	assert.NoError(t, fake.AssertConditions([]v1.NodeCondition{conditions[0]}))
+}
